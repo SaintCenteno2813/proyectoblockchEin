@@ -6,6 +6,7 @@ import modelo.Encriptador;
 import modelo.Medicamento;
 import modelo.Producto;
 import modelo.TransaccionInventario;
+import modelo.ConexionPostgres; // Importación necesaria para BD
 
 import javax.crypto.SecretKey;
 import javax.swing.*;
@@ -18,21 +19,28 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.sql.SQLException; // Importación SQL
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import org.bouncycastle.jce.provider.BouncyCastleProvider; 
+
 
 /**
  *
  * @author Erick
  */
 public class FarmaciaApp extends JFrame {
+    
+  
     private Blockchain blockchain;
     private Bloque bloquePendiente;
     private ArrayList<String> listaFarmacias;
 
-    private static final String RUTA_LLAVE_PUBLICA = "public_key.pem";
-    private static final String RUTA_LLAVE_PRIVADA = "private_key.pem";
+
+private static final String RUTA_LLAVE_PUBLICA = "public_key_descifrada.pem"; 
+private static final String RUTA_LLAVE_PRIVADA = "private_key_descifrada.pem";
 
     private JComboBox<String> comboFarmacias;
     private DefaultListModel<Bloque> listModelBloques;
@@ -42,10 +50,11 @@ public class FarmaciaApp extends JFrame {
     private DefaultListModel<Producto> listModelInventario;
     private JList<Producto> listaInventario;
     private JTextArea areaContenidoBloque;
-
     private JLabel labelEstado;
+ 
 
     public FarmaciaApp() {
+
         blockchain = new Blockchain(4);
         bloquePendiente = new Bloque(blockchain.obtenerUltimoBloque().getHash());
         listaFarmacias = new ArrayList<>();
@@ -66,6 +75,7 @@ public class FarmaciaApp extends JFrame {
         comboFarmacias.addActionListener(e -> actualizarInventario());
         panelIzquierdo.add(comboFarmacias, BorderLayout.NORTH);
 
+        // Inicialización de ListModels y JLists
         listModelInventario = new DefaultListModel<>();
         listaInventario = new JList<>(listModelInventario);
         listaInventario.setBorder(BorderFactory.createTitledBorder("Inventario Actual"));
@@ -154,10 +164,8 @@ public class FarmaciaApp extends JFrame {
         }
 
         try {
-            //  Generar una llave simétrica (AES)
             SecretKey llaveAes = Encriptador.generarLlaveAes();
             
-            //  Serializar y encriptar las transacciones con la llave AES
             StringBuilder jsonTransacciones = new StringBuilder("[");
             for (int i = 0; i < bloquePendiente.getTransacciones().size(); i++) {
                 TransaccionInventario t = bloquePendiente.getTransacciones().get(i);
@@ -181,46 +189,93 @@ public class FarmaciaApp extends JFrame {
             String datosBase64 = Base64.getEncoder().encodeToString(datosCifradosAes);
             
             ArrayList<String> listaDatosEncriptados = new ArrayList<>();
-            listaDatosEncriptados.add(datosBase64); // Ahora la lista solo contiene un string grande encriptado
+            listaDatosEncriptados.add(datosBase64);
 
-            //  Encriptar la llave AES con la llave pública (RSA)
             PublicKey llavePublica = Encriptador.cargarLlavePublica(RUTA_LLAVE_PUBLICA);
             byte[] llaveAesCifrada = Encriptador.cifrarLlaveRsa(llaveAes, llavePublica);
             String llaveAesBase64 = Base64.getEncoder().encodeToString(llaveAesCifrada);
 
             bloquePendiente.setDatosEncriptados(listaDatosEncriptados);
             bloquePendiente.setLlaveAesEncriptada(llaveAesBase64);
+            bloquePendiente.setIndex(blockchain.getCadena().size());
+
+            // Ejecuta la minería y agregar el bloque
+            labelEstado.setText("Estado: Minando el nuevo bloque...");
+            bloquePendiente.minarBloque(blockchain.getDificultad());
+            
+            blockchain.agregarBloque(bloquePendiente);
+            listModelBloques.addElement(bloquePendiente);
+            
+
+            try {
+                ConexionPostgres db = new ConexionPostgres();
+                db.guardarNonce(
+                    bloquePendiente.getIndex(),
+                    bloquePendiente.getHash(),
+                    (long)bloquePendiente.getNonce()
+                );
+            } catch (SQLException ex) {
+                // El error de conexión o driver se capturará aquí si la BD no está encendida.
+                JOptionPane.showMessageDialog(this, "Error al guardar el nonce en BD. Verifique la conexión: " + ex.getMessage());
+                ex.printStackTrace();
+            }
+ 
+
+            guardarBloqueComoJSON(bloquePendiente, blockchain.getCadena().size() - 1);
+
+            listModelTransaccionesPendientes.clear();
+            bloquePendiente = new Bloque(blockchain.obtenerUltimoBloque().getHash());
+
+            actualizarInventario();
+            labelEstado.setText("Estado: Bloque minado con éxito.");
+            JOptionPane.showMessageDialog(this, "¡Bloque minado con éxito!");
 
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al encriptar las transacciones: " + ex.getMessage(), "Error de Encriptación", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error al minar: " + ex.getMessage(), "Error de Proceso", JOptionPane.ERROR_MESSAGE);
             ex.printStackTrace();
-            return;
         }
-
-        labelEstado.setText("Estado: Minando el nuevo bloque...");
-        bloquePendiente.minarBloque(blockchain.getDificultad());
-        blockchain.agregarBloque(bloquePendiente);
-        listModelBloques.addElement(bloquePendiente);
-
-        guardarBloqueComoJSON(bloquePendiente, blockchain.getCadena().size() - 1);
-
-        listModelTransaccionesPendientes.clear();
-        bloquePendiente = new Bloque(blockchain.obtenerUltimoBloque().getHash());
-
-        actualizarInventario();
-        labelEstado.setText("Estado: Bloque minado con éxito.");
-        JOptionPane.showMessageDialog(this, "¡Bloque minado con éxito!");
     }
 
     private void validarCadena(ActionEvent e) {
-        boolean esValida = blockchain.esCadenaValida();
-        if (esValida) {
-            labelEstado.setText("Estado: La cadena de bloques es válida. ✔️");
-            JOptionPane.showMessageDialog(this, "¡La cadena de bloques es válida!");
-        } else {
-            labelEstado.setText("Estado: La cadena de bloques es inválida. ❌");
-            JOptionPane.showMessageDialog(this, "¡La cadena de bloques es inválida!");
+        if (!blockchain.esCadenaValida()) {
+            labelEstado.setText("Estado: La cadena de bloques es inválida (Estructura rota). ❌");
+            JOptionPane.showMessageDialog(this, "¡La cadena de bloques es inválida (hashes no coinciden)!");
+            return;
         }
+
+ 
+        try {
+            ConexionPostgres db = new ConexionPostgres();
+            
+            for (Bloque bloque : blockchain.getCadena()) {
+                if (bloque.getIndex() == 0) continue; // Saltar el Génesis
+                
+                Long nonceGuardado = db.obtenerNonce(bloque.getIndex());
+                
+                if (nonceGuardado == null) {
+                    JOptionPane.showMessageDialog(this, "Error: Nonce del Bloque #" + bloque.getIndex() + " no encontrado en BD. Cadena no confiable.");
+                    return;
+                }
+
+                // Recalcular el hash usando el nonce recuperado
+                String hashRecalculado = bloque.calcularHashConNonce(nonceGuardado); 
+
+                // Comparar si el hash recalculado coincide con el hash almacenado
+                if (!hashRecalculado.equals(bloque.getHash())) {
+                    labelEstado.setText("Estado: La cadena es INCONFIABLE. El bloque #" + bloque.getIndex() + " ha sido alterado.");
+                    JOptionPane.showMessageDialog(this, "¡Error de confianza! El Nonce de la BD no genera el Hash del Bloque.");
+                    return; 
+                }
+            }
+
+            labelEstado.setText("Estado: La cadena es válida y CONFIABLE (Verificada con BD). ✔️");
+            JOptionPane.showMessageDialog(this, "¡La cadena de bloques es válida y la Prueba de Trabajo coincide con la BD!");
+
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error de conexión/SQL al validar con la base de datos. Verifique el driver y la conexión: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+
     }
 
     private void verContenidoBloque(ActionEvent e) {
@@ -230,7 +285,6 @@ public class FarmaciaApp extends JFrame {
             return;
         }
         
-        // guarda solo un string grande encriptado
         ArrayList<String> datosBase64List = bloqueSeleccionado.getDatosEncriptados();
         String datosBase64 = datosBase64List.get(0);
         String llaveAesBase64 = bloqueSeleccionado.getLlaveAesEncriptada();
@@ -241,8 +295,11 @@ public class FarmaciaApp extends JFrame {
         }
 
         try {
+
             char[] contrasenia = Encriptador.pedirContrasenia("Ingresa la contraseña para la llave privada:");
-            PrivateKey llavePrivada = Encriptador.cargarLlavePrivadaDesdePem(RUTA_LLAVE_PRIVADA, contrasenia);
+            
+            // Carga la llave privada cifrada con la contraseña
+            PrivateKey llavePrivada = Encriptador.cargarLlavePrivada(RUTA_LLAVE_PRIVADA, contrasenia);
             
             // Desencriptar la llave AES con la llave privada (RSA)
             byte[] llaveAesCifrada = Base64.getDecoder().decode(llaveAesBase64);
@@ -270,6 +327,10 @@ public class FarmaciaApp extends JFrame {
         HashMap<String, Producto> inventarioCalculado = new HashMap<>();
 
         for (Bloque bloque : blockchain.getCadena()) {
+            if (bloque.getTransacciones().isEmpty() && !bloque.getDatosEncriptados().isEmpty()) {
+                continue; 
+            }
+            
             for (TransaccionInventario transaccion : bloque.getTransacciones()) {
                 if (transaccion.getFarmaciaId().equals(farmaciaSeleccionada)) {
                     String codigo = transaccion.getProducto().getCodigo();
@@ -325,6 +386,11 @@ public class FarmaciaApp extends JFrame {
     }
 
     public static void main(String[] args) {
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+            System.out.println("Bouncy Castle registrado para manejar llaves cifradas.");
+        }
+
         SwingUtilities.invokeLater(() -> new FarmaciaApp().setVisible(true));
     }
 }

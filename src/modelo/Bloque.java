@@ -9,9 +9,9 @@ import java.util.Date;
 public class Bloque {
     private String hash;
     private String hashAnterior;
-    private ArrayList<TransaccionInventario> transacciones;
-    private ArrayList<String> datosEncriptados;
-    private String llaveAesEncriptada; //  Para guardar la llave AES encriptada
+    private ArrayList<TransaccionInventario> transacciones; // Lista que usamos para construir el JSON cifrado
+    private ArrayList<String> datosEncriptados; // Aquí se guarda el JSON cifrado
+    private String llaveAesEncriptada; 
     private long tiempoCreacion;
     private int nonce;
     private int index; 
@@ -20,8 +20,8 @@ public class Bloque {
         this.hashAnterior = hashAnterior;
         this.tiempoCreacion = new Date().getTime();
         this.transacciones = new ArrayList<>();
-        this.datosEncriptados = new ArrayList<>(); // Inicializar la lista
-        this.llaveAesEncriptada = ""; // 🌟 NUEVO: Inicializar la variable
+        this.datosEncriptados = new ArrayList<>();
+        this.llaveAesEncriptada = "";
         this.nonce = 0;
         this.hash = calcularHash();
         this.index = 0;
@@ -32,13 +32,30 @@ public class Bloque {
         transacciones.add(t);
     }
 
-    // método para calcular el hash
+    // método para calcular el hash (usa datos encriptados para la validación)
     public String calcularHash() {
         String datosBloque = hashAnterior + Long.toString(tiempoCreacion) + Integer.toString(nonce) + llaveAesEncriptada;
         for (String dato : datosEncriptados) {
             datosBloque += dato;
         }
         return CriptoUtil.aplicarSha256(datosBloque);
+    }
+    
+    
+    /**
+     * Recalcula el hash del bloque usando un nonce específico (obtenido de la BD).
+     */
+    public String calcularHashConNonce(long nonceDelBD) {
+        String datos = hashAnterior + 
+                       Long.toString(tiempoCreacion) +
+                       Long.toString(nonceDelBD) + 
+                       llaveAesEncriptada;
+                       
+        for (String dato : datosEncriptados) {
+            datos += dato;
+        }
+        
+        return CriptoUtil.aplicarSha256(datos); 
     }
     
     // prueba de trabajo para minar el bloque
@@ -62,7 +79,6 @@ public class Bloque {
         this.hash = calcularHash();
     }
     
-    //  Getters y Setters para la llave AES encriptada
     public String getLlaveAesEncriptada() { return llaveAesEncriptada; }
     public void setLlaveAesEncriptada(String llaveAesEncriptada) { 
         this.llaveAesEncriptada = llaveAesEncriptada; 
@@ -75,29 +91,24 @@ public class Bloque {
     
     public void setIndex(int index) { this.index = index; }
     
+    
+ 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         sb.append("  \"index\": ").append(index).append(",\n");
         sb.append("  \"timestamp\": ").append(tiempoCreacion).append(",\n");
-        sb.append("  \"transacciones\": [\n"); // Mantenemos transacciones para la serialización
         
-        // Asumiendo que esta parte no se usa para el JSON guardado
-        // y se usaría el JSON de datosEncriptados para guardar.
-        // Si quieres guardar el JSON de transacciones originales, necesitarías descifrar primero.
-        // Por la simplicidad de este ejercicio, nos enfocaremos en la funcionalidad
-        // de encriptación, por lo que el toString no es la fuente final de datos guardados.
-        // Si necesitas que el toString sea una representación completa y descifrable,
-        // tendríamos que modificarlo para que haga el proceso de desencriptado.
         
-        sb.append("  ],\n");
+
         sb.append("  \"nonce\": ").append(nonce).append(",\n");
         sb.append("  \"hashAnterior\": \"").append(hashAnterior).append("\",\n");
         sb.append("  \"hash\": \"").append(hash).append("\",\n");
-        sb.append("  \"llaveAesEncriptada\": \"").append(llaveAesEncriptada).append("\",\n"); // 🌟 NUEVO
-        sb.append("  \"datosEncriptados\": ["); // 🌟 MODIFICADO
+        sb.append("  \"llaveAesEncriptada\": \"").append(llaveAesEncriptada).append("\",\n"); 
+        sb.append("  \"datosEncriptados\": ["); 
         
+        // El campo de datos encriptados se muestra como un array de strings (Base64)
         for (int i = 0; i < datosEncriptados.size(); i++) {
             sb.append("\"").append(datosEncriptados.get(i)).append("\"");
             if (i < datosEncriptados.size() - 1) {

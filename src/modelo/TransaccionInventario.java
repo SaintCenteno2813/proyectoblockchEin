@@ -16,7 +16,7 @@ public class TransaccionInventario implements Serializable {
     private long tiempoCreacion;
     private String hashTransaccion;
 
-    // campos para la información adicional
+    
     private String responsable;
     private String lote;
     private String fechaCaducidad;
@@ -34,7 +34,7 @@ public class TransaccionInventario implements Serializable {
 
     // Calcula el hash de la transaccion
     public String calcularHash() {
-        // campos en la cadena para el hash
+        
         String datosTransaccion = farmaciaId + producto.getNombre() + producto.getCodigo() + Integer.toString(producto.getCantidad()) + tipoMovimiento + responsable + lote + fechaCaducidad + Long.toString(tiempoCreacion);
         return CriptoUtil.aplicarSha256(datosTransaccion);
     }
