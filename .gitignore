@@ -12,4 +12,6 @@ Thumbs.db
 
 # Claves (recomendado)
 *.pem
+# NetBeans
+nbproject/private/
 
