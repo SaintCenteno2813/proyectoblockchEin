@@ -1,6 +1,15 @@
+# Compilados
+build/
+dist/
 *.class
-*.pem
-/build/
-/nbproject/private/
 
-/dist/
+# Logs
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Claves (recomendado)
+*.pem
+
