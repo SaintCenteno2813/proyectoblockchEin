@@ -86,7 +86,7 @@ public class Encriptador {
             
             keyPem = keyPem.replaceAll("-----BEGIN (?:ENCRYPTED )?PRIVATE KEY-----", "")
                            .replaceAll("-----END (?:ENCRYPTED )?PRIVATE KEY-----", "")
-                           .replaceAll("\\s", ""); // Quita saltos de línea y espacios
+                           .replaceAll("\\s", ""); 
                            
             byte[] decoded = Base64.getDecoder().decode(keyPem);
             PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(decoded);
@@ -126,7 +126,7 @@ public class Encriptador {
         }
     }
 
-    // Método para pedir la contraseña al usuario (sin cambios)
+    // Método para pedir la contraseña al usuario 
     public static char[] pedirContrasenia(String mensaje) {
         JPasswordField passwordField = new JPasswordField();
         int option = JOptionPane.showConfirmDialog(null, passwordField, mensaje, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);

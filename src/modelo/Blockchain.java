@@ -1,24 +1,26 @@
-
 package modelo;
+
 import java.util.ArrayList;
-/**
- *
- * @author Erick
- */
+
 public class Blockchain {
     private ArrayList<Bloque> cadena;
     private int dificultad;
+    private Bloque bloquePendiente; 
 
     public Blockchain(int dificultad) {
         this.dificultad = dificultad;
         this.cadena = new ArrayList<>();
         crearBloqueGenesis();
+        // ⭐ Inicializar bloque pendiente
+        this.bloquePendiente = new Bloque(obtenerUltimoBloque().getHash());
     }
 
     private void crearBloqueGenesis() {
         Bloque bloqueGenesis = new Bloque("0");
+        bloqueGenesis.setIndex(0); 
         bloqueGenesis.minarBloque(dificultad);
         cadena.add(bloqueGenesis);
+        System.out.println("✅ Bloque Génesis creado: " + bloqueGenesis.getHash());
     }
     
     public Bloque obtenerUltimoBloque() {
@@ -26,8 +28,12 @@ public class Blockchain {
     }
 
     public void agregarBloque(Bloque nuevoBloque) {
-        nuevoBloque.minarBloque(dificultad);
+        // No minar dos veces
+        nuevoBloque.setIndex(cadena.size());
+        nuevoBloque.setHashAnterior(obtenerUltimoBloque().getHash());
         cadena.add(nuevoBloque);
+        System.out.println("✅ Bloque #" + nuevoBloque.getIndex() + " agregado");
+        System.out.println("📊 Total bloques: " + cadena.size());
     }
 
     public boolean esCadenaValida() {
@@ -39,21 +45,35 @@ public class Blockchain {
             bloqueAnterior = cadena.get(i - 1);
 
             if (!bloqueActual.getHash().equals(bloqueActual.calcularHash())) {
-                System.out.println("El hash del bloque actual no es válido.");
+                System.out.println("❌ Hash inválido en bloque #" + i);
                 return false;
             }
 
             if (!bloqueActual.getHashAnterior().equals(bloqueAnterior.getHash())) {
-                System.out.println("El hash del bloque anterior no coincide.");
+                System.out.println("❌ Enlace roto en bloque #" + i);
                 return false;
             }
         }
         return true;
     }
 
+  
+    public Bloque getBloquePendiente() {
+        return bloquePendiente;
+    }
+    
+    public void setBloquePendiente(Bloque bloque) {
+        this.bloquePendiente = bloque;
+    }
+    
     public ArrayList<Bloque> getCadena() {
         return cadena;
     }
+    
+    public void setCadena(ArrayList<Bloque> nuevaCadena) {
+    this.cadena = nuevaCadena;
+    System.out.println("🔄 Cadena reemplazada. Total bloques: " + cadena.size());
+}
 
     public int getDificultad() {
         return dificultad;

@@ -1,110 +1,170 @@
 package vista;
 
+// ──────────────────────────────────────────────────────────
+// Imports del proyecto
+// ──────────────────────────────────────────────────────────
 import modelo.Bloque;
 import modelo.Blockchain;
 import modelo.Encriptador;
 import modelo.Medicamento;
 import modelo.Producto;
 import modelo.TransaccionInventario;
-import modelo.ConexionPostgres; // Importación necesaria para BD
-
+import modelo.ConexionPostgres;
+import java.net.Socket;
+// ──────────────────────────────────────────────────────────
+// Imports de Java
+// ──────────────────────────────────────────────────────────
 import javax.crypto.SecretKey;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.sql.SQLException; // Importación SQL
-import java.security.Security;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
-import org.bouncycastle.jce.provider.BouncyCastleProvider; 
 
+// ──────────────────────────────────────────────────────────
+// Imports externos
+// ──────────────────────────────────────────────────────────
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
- *
  * @author Erick
  */
 public class FarmaciaApp extends JFrame {
-    
-  
+
+    // ──────────────────────────────────────────────────────────
+    // Atributos principales
+    // ──────────────────────────────────────────────────────────
     private Blockchain blockchain;
     private Bloque bloquePendiente;
     private ArrayList<String> listaFarmacias;
 
+    // Rutas de llaves
+    private static final String RUTA_LLAVE_PUBLICA = "public_key_descifrada.pem";
+       private static final String RUTA_LLAVE_PRIVADA = "private_key_descifrada.pem";
 
-private static final String RUTA_LLAVE_PUBLICA = "public_key_descifrada.pem"; 
-private static final String RUTA_LLAVE_PRIVADA = "private_key_descifrada.pem";
-
+    // Componentes UI
     private JComboBox<String> comboFarmacias;
     private DefaultListModel<Bloque> listModelBloques;
     private JList<Bloque> listaBloques;
+
     private DefaultListModel<TransaccionInventario> listModelTransaccionesPendientes;
     private JList<TransaccionInventario> listaTransaccionesPendientes;
+
     private DefaultListModel<Producto> listModelInventario;
     private JList<Producto> listaInventario;
+
     private JTextArea areaContenidoBloque;
     private JLabel labelEstado;
- 
 
+    // ──────────────────────────────────────────────────────────
+    // Constructor
+    // ──────────────────────────────────────────────────────────
     public FarmaciaApp() {
 
+        // Inicialización
         blockchain = new Blockchain(4);
         bloquePendiente = new Bloque(blockchain.obtenerUltimoBloque().getHash());
-        listaFarmacias = new ArrayList<>();
 
+        listaFarmacias = new ArrayList<>();
         listaFarmacias.add("Farmacia A");
         listaFarmacias.add("Farmacia B");
 
+        configurarVentana();
+        configurarPaneles();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // UI - Configuración principal
+    // ──────────────────────────────────────────────────────────
+    private void configurarVentana() {
         setTitle("Inventario de Farmacias con Blockchain");
         setSize(1000, 700);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+    }
 
+    private void configurarPaneles() {
         JPanel panelPrincipal = new JPanel(new BorderLayout(10, 10));
         JPanel panelIzquierdo = new JPanel(new BorderLayout());
         JPanel panelDerecho = new JPanel(new BorderLayout());
 
+        // ─────────────────────────────
+        // Combo de farmacias
+        // ─────────────────────────────
         comboFarmacias = new JComboBox<>(listaFarmacias.toArray(new String[0]));
         comboFarmacias.addActionListener(e -> actualizarInventario());
         panelIzquierdo.add(comboFarmacias, BorderLayout.NORTH);
 
-        // Inicialización de ListModels y JLists
+        // ─────────────────────────────
+        // Inventario
+        // ─────────────────────────────
         listModelInventario = new DefaultListModel<>();
         listaInventario = new JList<>(listModelInventario);
         listaInventario.setBorder(BorderFactory.createTitledBorder("Inventario Actual"));
         panelIzquierdo.add(new JScrollPane(listaInventario), BorderLayout.CENTER);
 
+        // ─────────────────────────────
+        // Bloques
+        // ─────────────────────────────
         listModelBloques = new DefaultListModel<>();
         listaBloques = new JList<>(listModelBloques);
         listaBloques.setBorder(BorderFactory.createTitledBorder("Bloques de la Cadena"));
-        listModelBloques.addElement(blockchain.getCadena().get(0));
+        listModelBloques.addElement(blockchain.getCadena().get(0)); // Génesis
 
+        // ─────────────────────────────
+        // Transacciones pendientes
+        // ─────────────────────────────
         listModelTransaccionesPendientes = new DefaultListModel<>();
         listaTransaccionesPendientes = new JList<>(listModelTransaccionesPendientes);
-        listaTransaccionesPendientes.setBorder(BorderFactory.createTitledBorder("Transacciones Pendientes"));
+        listaTransaccionesPendientes.setBorder(
+                BorderFactory.createTitledBorder("Transacciones Pendientes")
+        );
 
+        // ─────────────────────────────
+        // Contenido desencriptado
+        // ─────────────────────────────
         areaContenidoBloque = new JTextArea();
-        areaContenidoBloque.setBorder(BorderFactory.createTitledBorder("Contenido del Bloque (Desencriptado)"));
         areaContenidoBloque.setEditable(false);
+        areaContenidoBloque.setBorder(
+                BorderFactory.createTitledBorder("Contenido del Bloque (Desencriptado)")
+        );
 
-        JSplitPane splitPaneBloquesTransacciones = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                new JScrollPane(listaBloques), new JScrollPane(listaTransaccionesPendientes));
-        splitPaneBloquesTransacciones.setDividerLocation(300);
+        // ─────────────────────────────
+        // Split panes
+        // ─────────────────────────────
+        JSplitPane splitBloquesTransacciones = new JSplitPane(
+                JSplitPane.HORIZONTAL_SPLIT,
+                new JScrollPane(listaBloques),
+                new JScrollPane(listaTransaccionesPendientes)
+        );
+        splitBloquesTransacciones.setDividerLocation(300);
 
-        JSplitPane splitPaneDerecho = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                splitPaneBloquesTransacciones, new JScrollPane(areaContenidoBloque));
-        splitPaneDerecho.setDividerLocation(300);
+        JSplitPane splitDerecho = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                splitBloquesTransacciones,
+                new JScrollPane(areaContenidoBloque)
+        );
+        splitDerecho.setDividerLocation(300);
 
-        panelDerecho.add(splitPaneDerecho, BorderLayout.CENTER);
+        panelDerecho.add(splitDerecho, BorderLayout.CENTER);
 
+        // ─────────────────────────────
+        // Panel de botones
+        // ─────────────────────────────
         JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+
         JButton btnRegistrarEntrada = new JButton("Registrar Entrada");
         JButton btnRegistrarSalida = new JButton("Registrar Salida");
         JButton btnMinarBloque = new JButton("Minar Nuevo Bloque");
@@ -123,9 +183,14 @@ private static final String RUTA_LLAVE_PRIVADA = "private_key_descifrada.pem";
         panelBotones.add(btnValidarCadena);
         panelBotones.add(btnVerContenido);
 
-        labelEstado = new JLabel("Estado: Listo para registrar transacciones.");
-        labelEstado.setHorizontalAlignment(SwingConstants.CENTER);
+        // ─────────────────────────────
+        // Estado
+        // ─────────────────────────────
+        labelEstado = new JLabel("Estado: Listo para registrar transacciones.", SwingConstants.CENTER);
 
+        // ─────────────────────────────
+        // Ensamblar todo
+        // ─────────────────────────────
         panelPrincipal.add(panelIzquierdo, BorderLayout.WEST);
         panelPrincipal.add(panelDerecho, BorderLayout.CENTER);
         panelPrincipal.add(panelBotones, BorderLayout.SOUTH);
@@ -134,263 +199,317 @@ private static final String RUTA_LLAVE_PRIVADA = "private_key_descifrada.pem";
         add(panelPrincipal);
     }
 
+    // ──────────────────────────────────────────────────────────
+    // Registrar movimientos
+    // ──────────────────────────────────────────────────────────
     private void registrarMovimiento(String tipo) {
         String farmaciaSeleccionada = (String) comboFarmacias.getSelectedItem();
+
         if (farmaciaSeleccionada == null) {
-            JOptionPane.showMessageDialog(this, "Debe seleccionar una farmacia.");
+            JOptionPane.showMessageDialog(this, "Seleccione una farmacia.");
             return;
         }
 
         String nombreProducto = JOptionPane.showInputDialog("Nombre del producto:");
         String codigoProducto = JOptionPane.showInputDialog("Código del producto:");
-        int cantidad = Integer.parseInt(JOptionPane.showInputDialog("Cantidad a " + (tipo.equals(TransaccionInventario.ENTRADA) ? "ingresar" : "retirar") + ":"));
+        int cantidad = Integer.parseInt(
+                JOptionPane.showInputDialog("Cantidad a " + (tipo.equals("ENTRADA") ? "ingresar" : "retirar") + ":")
+        );
 
         String responsable = JOptionPane.showInputDialog("Responsable:");
         String lote = JOptionPane.showInputDialog("Lote:");
         String fechaCaducidad = JOptionPane.showInputDialog("Fecha de caducidad (DD/MM/AAAA):");
 
-        Producto nuevoProducto = new Medicamento(nombreProducto, codigoProducto, cantidad, "250mg");
+        Producto producto = new Medicamento(nombreProducto, codigoProducto, cantidad, "250mg");
+        TransaccionInventario transaccion = new TransaccionInventario(
+                farmaciaSeleccionada, producto, tipo, responsable, lote, fechaCaducidad
+        );
 
-        TransaccionInventario transaccion = new TransaccionInventario(farmaciaSeleccionada, nuevoProducto, tipo, responsable, lote, fechaCaducidad);
         bloquePendiente.agregarTransaccion(transaccion);
         listModelTransaccionesPendientes.addElement(transaccion);
-        labelEstado.setText("Estado: Transacción agregada. A la espera de ser minada.");
+
+        labelEstado.setText("Estado: Transacción agregada.");
     }
 
+    // ──────────────────────────────────────────────────────────
+    // MINAR NUEVO BLOQUE
+    // ──────────────────────────────────────────────────────────
     private void minarNuevoBloque(ActionEvent e) {
         if (listModelTransaccionesPendientes.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No hay transacciones pendientes para minar.");
+            JOptionPane.showMessageDialog(this, "No hay transacciones para minar.");
             return;
         }
 
         try {
+            // Generar AES
             SecretKey llaveAes = Encriptador.generarLlaveAes();
-            
-            StringBuilder jsonTransacciones = new StringBuilder("[");
+
+            // Convertir transacciones a JSON manual
+            StringBuilder json = new StringBuilder("[");
             for (int i = 0; i < bloquePendiente.getTransacciones().size(); i++) {
                 TransaccionInventario t = bloquePendiente.getTransacciones().get(i);
-                jsonTransacciones.append("{");
-                jsonTransacciones.append("\"farmaciaId\":\"").append(t.getFarmaciaId()).append("\",");
-                jsonTransacciones.append("\"productoNombre\":\"").append(t.getProducto().getNombre()).append("\",");
-                jsonTransacciones.append("\"productoCodigo\":\"").append(t.getProducto().getCodigo()).append("\",");
-                jsonTransacciones.append("\"cantidad\":").append(t.getProducto().getCantidad()).append(",");
-                jsonTransacciones.append("\"tipoMovimiento\":\"").append(t.getTipoMovimiento()).append("\",");
-                jsonTransacciones.append("\"responsable\":\"").append(t.getResponsable()).append("\",");
-                jsonTransacciones.append("\"lote\":\"").append(t.getLote()).append("\",");
-                jsonTransacciones.append("\"fechaCaducidad\":\"").append(t.getFechaCaducidad()).append("\"");
-                jsonTransacciones.append("}");
-                if (i < bloquePendiente.getTransacciones().size() - 1) {
-                    jsonTransacciones.append(",");
-                }
+                json.append("{")
+                        .append("\"farmaciaId\":\"").append(t.getFarmaciaId()).append("\",")
+                        .append("\"productoNombre\":\"").append(t.getProducto().getNombre()).append("\",")
+                        .append("\"productoCodigo\":\"").append(t.getProducto().getCodigo()).append("\",")
+                        .append("\"cantidad\":").append(t.getProducto().getCantidad()).append(",")
+                        .append("\"tipoMovimiento\":\"").append(t.getTipoMovimiento()).append("\",")
+                        .append("\"responsable\":\"").append(t.getResponsable()).append("\",")
+                        .append("\"lote\":\"").append(t.getLote()).append("\",")
+                        .append("\"fechaCaducidad\":\"").append(t.getFechaCaducidad()).append("\"")
+                        .append("}");
+                if (i < bloquePendiente.getTransacciones().size() - 1) json.append(",");
             }
-            jsonTransacciones.append("]");
+            json.append("]");
 
-            byte[] datosCifradosAes = Encriptador.cifrarAes(jsonTransacciones.toString().getBytes(StandardCharsets.UTF_8), llaveAes);
-            String datosBase64 = Base64.getEncoder().encodeToString(datosCifradosAes);
-            
-            ArrayList<String> listaDatosEncriptados = new ArrayList<>();
-            listaDatosEncriptados.add(datosBase64);
+            // Cifrar datos con AES
+            byte[] datosCifrados = Encriptador.cifrarAes(
+                    json.toString().getBytes(StandardCharsets.UTF_8),
+                    llaveAes
+            );
+            String datosBase64 = Base64.getEncoder().encodeToString(datosCifrados);
 
+            // Cifrar llave AES con RSA
             PublicKey llavePublica = Encriptador.cargarLlavePublica(RUTA_LLAVE_PUBLICA);
             byte[] llaveAesCifrada = Encriptador.cifrarLlaveRsa(llaveAes, llavePublica);
             String llaveAesBase64 = Base64.getEncoder().encodeToString(llaveAesCifrada);
 
-            bloquePendiente.setDatosEncriptados(listaDatosEncriptados);
+            // Guardar en el bloque
+            ArrayList<String> listaDatos = new ArrayList<>();
+            listaDatos.add(datosBase64);
+
+            bloquePendiente.setDatosEncriptados(listaDatos);
             bloquePendiente.setLlaveAesEncriptada(llaveAesBase64);
             bloquePendiente.setIndex(blockchain.getCadena().size());
 
-            // Ejecuta la minería y agregar el bloque
-            labelEstado.setText("Estado: Minando el nuevo bloque...");
+            // Minar
+            labelEstado.setText("Estado: Minando bloque...");
             bloquePendiente.minarBloque(blockchain.getDificultad());
-            
+
+            // Agregar a la cadena
             blockchain.agregarBloque(bloquePendiente);
             listModelBloques.addElement(bloquePendiente);
-            
 
+            // Replicar
+            try {
+                replicarBloqueAServidor(bloquePendiente, "localhost", 8080);
+            } catch (Exception ex) {
+                System.err.println("⚠ No se pudo replicar: " + ex.getMessage());
+            }
+
+            // Guardar nonce en BD
             try {
                 ConexionPostgres db = new ConexionPostgres();
                 db.guardarNonce(
-                    bloquePendiente.getIndex(),
-                    bloquePendiente.getHash(),
-                    (long)bloquePendiente.getNonce()
+                        bloquePendiente.getIndex(),
+                        bloquePendiente.getHash(),
+                        (long) bloquePendiente.getNonce()
                 );
-            } catch (SQLException ex) {
-                // El error de conexión o driver se capturará aquí si la BD no está encendida.
-                JOptionPane.showMessageDialog(this, "Error al guardar el nonce en BD. Verifique la conexión: " + ex.getMessage());
-                ex.printStackTrace();
-            }
- 
 
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Error al guardar nonce en BD: " + ex.getMessage()
+                );
+            }
+
+            // Guardar archivo JSON
             guardarBloqueComoJSON(bloquePendiente, blockchain.getCadena().size() - 1);
 
+            // Reset
             listModelTransaccionesPendientes.clear();
             bloquePendiente = new Bloque(blockchain.obtenerUltimoBloque().getHash());
 
             actualizarInventario();
-            labelEstado.setText("Estado: Bloque minado con éxito.");
-            JOptionPane.showMessageDialog(this, "¡Bloque minado con éxito!");
+            labelEstado.setText("Estado: Bloque minado correctamente.");
+            JOptionPane.showMessageDialog(this, "Bloque minado con éxito.");
 
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al minar: " + ex.getMessage(), "Error de Proceso", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error al minar: " + ex.getMessage());
             ex.printStackTrace();
         }
     }
 
+    // ──────────────────────────────────────────────────────────
+    // VALIDACIÓN DE CADENA + BD
+    // ──────────────────────────────────────────────────────────
     private void validarCadena(ActionEvent e) {
+
         if (!blockchain.esCadenaValida()) {
-            labelEstado.setText("Estado: La cadena de bloques es inválida (Estructura rota). ❌");
-            JOptionPane.showMessageDialog(this, "¡La cadena de bloques es inválida (hashes no coinciden)!");
+            JOptionPane.showMessageDialog(this, "La cadena es inválida.");
+            labelEstado.setText("Estado: Cadena inválida.");
             return;
         }
 
- 
         try {
             ConexionPostgres db = new ConexionPostgres();
-            
+
             for (Bloque bloque : blockchain.getCadena()) {
-                if (bloque.getIndex() == 0) continue; // Saltar el Génesis
-                
-                Long nonceGuardado = db.obtenerNonce(bloque.getIndex());
-                
-                if (nonceGuardado == null) {
-                    JOptionPane.showMessageDialog(this, "Error: Nonce del Bloque #" + bloque.getIndex() + " no encontrado en BD. Cadena no confiable.");
+
+                if (bloque.getIndex() == 0) continue;   // Saltar génesis
+
+                Long nonceBD = db.obtenerNonce(bloque.getIndex());
+
+                if (nonceBD == null) {
+                    JOptionPane.showMessageDialog(this, "Nonce no encontrado en BD.");
                     return;
                 }
 
-                // Recalcular el hash usando el nonce recuperado
-                String hashRecalculado = bloque.calcularHashConNonce(nonceGuardado); 
+                String hashRecalculado = bloque.calcularHashConNonce(nonceBD);
 
-                // Comparar si el hash recalculado coincide con el hash almacenado
                 if (!hashRecalculado.equals(bloque.getHash())) {
-                    labelEstado.setText("Estado: La cadena es INCONFIABLE. El bloque #" + bloque.getIndex() + " ha sido alterado.");
-                    JOptionPane.showMessageDialog(this, "¡Error de confianza! El Nonce de la BD no genera el Hash del Bloque.");
-                    return; 
+                    JOptionPane.showMessageDialog(this, "Hash no coincide con el nonce guardado.");
+                    return;
                 }
             }
 
-            labelEstado.setText("Estado: La cadena es válida y CONFIABLE (Verificada con BD). ✔️");
-            JOptionPane.showMessageDialog(this, "¡La cadena de bloques es válida y la Prueba de Trabajo coincide con la BD!");
+            JOptionPane.showMessageDialog(this, "Cadena válida y verificada con BD.");
+            labelEstado.setText("Estado: Cadena confiable ✔");
 
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error de conexión/SQL al validar con la base de datos. Verifique el driver y la conexión: " + ex.getMessage());
-            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error SQL: " + ex.getMessage());
         }
-
     }
 
+    // ──────────────────────────────────────────────────────────
+    // VER CONTENIDO DE BLOQUE (DESCIFRAR)
+    // ──────────────────────────────────────────────────────────
     private void verContenidoBloque(ActionEvent e) {
-        Bloque bloqueSeleccionado = listaBloques.getSelectedValue();
-        if (bloqueSeleccionado == null) {
-            JOptionPane.showMessageDialog(this, "Debe seleccionar un bloque de la lista.");
-            return;
-        }
-        
-        ArrayList<String> datosBase64List = bloqueSeleccionado.getDatosEncriptados();
-        String datosBase64 = datosBase64List.get(0);
-        String llaveAesBase64 = bloqueSeleccionado.getLlaveAesEncriptada();
 
-        if (datosBase64 == null || datosBase64.isEmpty() || llaveAesBase64 == null || llaveAesBase64.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Este bloque no contiene datos encriptados.");
+        Bloque bloque = listaBloques.getSelectedValue();
+        if (bloque == null) {
+            JOptionPane.showMessageDialog(this, "Seleccione un bloque.");
             return;
         }
 
         try {
+            String datosBase64 = bloque.getDatosEncriptados().get(0);
+            String llaveAesBase64 = bloque.getLlaveAesEncriptada();
 
-            char[] contrasenia = Encriptador.pedirContrasenia("Ingresa la contraseña para la llave privada:");
-            
-            // Carga la llave privada cifrada con la contraseña
+            char[] contrasenia = Encriptador.pedirContrasenia("Ingrese la contraseña:");
+
             PrivateKey llavePrivada = Encriptador.cargarLlavePrivada(RUTA_LLAVE_PRIVADA, contrasenia);
-            
-            // Desencriptar la llave AES con la llave privada (RSA)
-            byte[] llaveAesCifrada = Base64.getDecoder().decode(llaveAesBase64);
-            SecretKey llaveAes = Encriptador.descifrarLlaveRsa(llaveAesCifrada, llavePrivada);
 
-            //  Desencriptar los datos con la llave AES
-            byte[] datosCifradosAes = Base64.getDecoder().decode(datosBase64);
-            byte[] datosDesencriptados = Encriptador.descifrarAes(datosCifradosAes, llaveAes);
-            String jsonOriginal = new String(datosDesencriptados, StandardCharsets.UTF_8);
+            SecretKey llaveAes = Encriptador.descifrarLlaveRsa(
+                    Base64.getDecoder().decode(llaveAesBase64),
+                    llavePrivada
+            );
 
-            areaContenidoBloque.setText(jsonOriginal);
+            byte[] datosDes = Encriptador.descifrarAes(
+                    Base64.getDecoder().decode(datosBase64),
+                    llaveAes
+            );
+
+            areaContenidoBloque.setText(new String(datosDes));
 
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al desencriptar: " + ex.getMessage(), "Error de Desencriptación", JOptionPane.ERROR_MESSAGE);
-            ex.printStackTrace();
-            areaContenidoBloque.setText("Error al desencriptar el contenido.");
+            areaContenidoBloque.setText("Error al desencriptar.");
+            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
         }
     }
 
+    // ──────────────────────────────────────────────────────────
+    // ACTUALIZAR INVENTARIO
+    // ──────────────────────────────────────────────────────────
     private void actualizarInventario() {
-        String farmaciaSeleccionada = (String) comboFarmacias.getSelectedItem();
-        if (farmaciaSeleccionada == null) return;
+
+        String farmacia = (String) comboFarmacias.getSelectedItem();
+        if (farmacia == null) return;
 
         listModelInventario.clear();
-        HashMap<String, Producto> inventarioCalculado = new HashMap<>();
+        HashMap<String, Producto> inventario = new HashMap<>();
 
         for (Bloque bloque : blockchain.getCadena()) {
-            if (bloque.getTransacciones().isEmpty() && !bloque.getDatosEncriptados().isEmpty()) {
-                continue; 
-            }
-            
-            for (TransaccionInventario transaccion : bloque.getTransacciones()) {
-                if (transaccion.getFarmaciaId().equals(farmaciaSeleccionada)) {
-                    String codigo = transaccion.getProducto().getCodigo();
 
-                    if (!inventarioCalculado.containsKey(codigo)) {
-                        inventarioCalculado.put(codigo, new Producto(transaccion.getProducto().getNombre(), codigo, 0) {
-                            @Override
-                            public String getTipo() {
-                                return "Desconocido";
-                            }
-                        });
-                    }
+            for (TransaccionInventario t : bloque.getTransacciones()) {
 
-                    Producto producto = inventarioCalculado.get(codigo);
-                    int nuevaCantidad = producto.getCantidad();
+                if (!t.getFarmaciaId().equals(farmacia)) continue;
 
-                    if (transaccion.getTipoMovimiento().equals(TransaccionInventario.ENTRADA)) {
-                        nuevaCantidad += transaccion.getProducto().getCantidad();
-                    } else if (transaccion.getTipoMovimiento().equals(TransaccionInventario.SALIDA)) {
-                        nuevaCantidad -= transaccion.getProducto().getCantidad();
-                    }
-                    producto.setCantidad(nuevaCantidad);
-                }
+                String codigo = t.getProducto().getCodigo();
+
+                inventario.putIfAbsent(
+                        codigo,
+                        new Producto(t.getProducto().getNombre(), codigo, 0) {
+                            @Override public String getTipo() { return "Desconocido"; }
+                        }
+                );
+
+                Producto p = inventario.get(codigo);
+                int cantidad = p.getCantidad();
+
+                cantidad += t.getTipoMovimiento().equals(TransaccionInventario.ENTRADA)
+                        ? t.getProducto().getCantidad()
+                        : -t.getProducto().getCantidad();
+
+                p.setCantidad(cantidad);
             }
         }
 
-        for (Producto p : inventarioCalculado.values()) {
-            listModelInventario.addElement(p);
-        }
+        inventario.values().forEach(listModelInventario::addElement);
     }
 
-    private void guardarBloqueComoJSON(Bloque bloque, int index) {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Guardar Bloque como JSON");
-        int userSelection = fileChooser.showSaveDialog(this);
-
-        if (userSelection == JFileChooser.APPROVE_OPTION) {
-            String filePath = fileChooser.getSelectedFile().getAbsolutePath();
-            if (!filePath.endsWith(".json")) {
-                filePath += ".json";
-            }
-
-            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(filePath), "UTF-8"))) {
-                
-                writer.write(bloque.toString());
-                JOptionPane.showMessageDialog(this, "Bloque guardado con éxito en: " + filePath);
-
-            } catch (IOException ex) {
-                JOptionPane.showMessageDialog(this, "Error al guardar el archivo: " + ex.getMessage());
-            }
-        }
-    }
-
-    public static void main(String[] args) {
-        if (Security.getProvider("BC") == null) {
-            Security.addProvider(new BouncyCastleProvider());
-            System.out.println("Bouncy Castle registrado para manejar llaves cifradas.");
-        }
-
-        SwingUtilities.invokeLater(() -> new FarmaciaApp().setVisible(true));
+    // ──────────────────────────────────────────────────────────
+    // GUARDAR BLOQUE COMO ARCHIVO JSON
+    // ──────────────────────────────────────────────────────────
+   private void guardarBloqueComoJSON(Bloque bloque, int numero) {
+    try (BufferedWriter writer = new BufferedWriter(
+            new OutputStreamWriter(
+                    new FileOutputStream("bloque_" + numero + ".json"),
+                    StandardCharsets.UTF_8
+            )
+    )) {
+        writer.write(bloque.toString()); // ⭐ Cambiar toJSON() por toString()
+    } catch (IOException e) {
+        JOptionPane.showMessageDialog(this, "Error guardando JSON: " + e.getMessage());
     }
 }
+
+    // ──────────────────────────────────────────────────────────
+    // REPLICACIÓN ENTRE SERVIDORES (llamada externa)
+    // ──────────────────────────────────────────────────────────
+   private void replicarBloqueAServidor(Bloque bloque, String host, int puerto) throws Exception {
+    try (Socket socket = new Socket(host, puerto);
+         PrintWriter out = new PrintWriter(socket.getOutputStream(), true, StandardCharsets.UTF_8);
+         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+        
+        // Serializar datos encriptados
+        StringBuilder datosEnc = new StringBuilder();
+        for (int i = 0; i < bloque.getDatosEncriptados().size(); i++) {
+            datosEnc.append(bloque.getDatosEncriptados().get(i));
+            if (i < bloque.getDatosEncriptados().size() - 1) {
+                datosEnc.append(":");
+            }
+        }
+        
+        String mensaje = "REPLICATE_BLOCK|" + 
+                        bloque.getIndex() + "|" +
+                        bloque.getHash() + "|" +
+                        bloque.getHashAnterior() + "|" +
+                        bloque.getNonce() + "|" +
+                        bloque.getTimestamp() + "|" +
+                        bloque.getLlaveAesEncriptada() + "|" +
+                        datosEnc.toString();
+        
+        out.println(mensaje);
+        String respuesta = in.readLine();
+        
+        if (respuesta != null && respuesta.startsWith("OK")) {
+            System.out.println("✅ Bloque replicado al servidor " + host + ":" + puerto);
+        }
+        
+    } catch (IOException e) {
+        System.err.println("⚠️ Error al replicar: " + e.getMessage());
+        throw e;
+    }
+}
+   
+   public static void main(String[] args) {
+    javax.swing.SwingUtilities.invokeLater(() -> {
+        FarmaciaApp app = new FarmaciaApp();
+        app.setVisible(true);
+    });
+}
+
+}
+
+

@@ -1,0 +1,9 @@
+{
+  "index": 1,
+  "timestamp": 1764725498191,
+  "nonce": 101290,
+  "hashAnterior": "0000180a6d415cbd9ebfd80a1afa8513469229b9bb0a7baba67a881faf76bb62",
+  "hash": "00009cc67fd4fa0e7de085cfbb3fe22707be05c92e6ab1a510a7df9674418c1f",
+  "llaveAesEncriptada": "obq+ACMd702FLQYuwF3r5Z5WuRbG2VgPXppQTyLgf7Z4+GnQXSwJoyVE3KnArZa5CCigbcKNX7M+vASmsclQSdVY8AGaiDJOYwzE+49DRdjtmm94NCr5Evn/V9i5bWYG/oXbAWj8KpvEdvi7ksiW/P62wwMPsr/sgN2/T2rUp8CJfwMzn4GAen0xGqqOKIfsQf3CRa5cIu3eOjj6swxLXF1+35TrjazUcIC3MhGnO78LO8gS4tOfQRc2hy4BC7f8aONIB8MUXsimAt44+qiLpgCXA9lR8k16Dp6zJrgfdEPhTHLnXmUxThuhM6ohtLq+8KZd2di+i/EQig5GWqAy8w==",
+  "datosEncriptados": ["9Vd/HnXeBsJrogAYIdTMIuq3wybq6yrfrmkEnsikDSHFn25V+k6frlqRG/PdJv4gvOPhwK1isMqMHwCuUPxoIhEz153RUotU6Fg1tBr4tYrveNJRwLh0AL6sf1HFyA5VYk5YEU3EkabLlf512H8HFABSq40MIGHsE4nLwp1DgvjtWudyL9QKRMpfcoq0AebpNcJmxDyJO9/LQ3N4hopt5roFuC1owHdbiOSYuMTskEOinERU3jV2YdKHUQ7ullKULMHf5OcgkPrISf37KLG0aw=="]
+}
